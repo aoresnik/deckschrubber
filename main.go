@@ -48,6 +48,9 @@ var (
 	debug *bool
 	// If true, no actual deletion is done
 	dry *bool
+	// If true, when an error occurs while reading repo metadata, skip to next repos
+	// (otherwise stop and exit)
+	continueOnError *bool
 	// If true, version is shown and program quits
 	ver *bool
 
@@ -87,6 +90,8 @@ func init() {
 	debug = flag.Bool("debug", false, "run in debug mode")
 	// Dry run option (doesn't actually delete)
 	dry = flag.Bool("dry", false, "does not actually deletes")
+	// Contininue on to next repo if error occurs while obtaining repo metadata (exit otherwise)
+	continueOnError = flag.Bool("continue-on-error", false, "if error occurs while obtaining repository, continue to next repo (exit otherwise)")
 	// Shows version
 	ver = flag.Bool("v", false, "shows version and quits")
 	// Skip insecure TLS
@@ -174,7 +179,12 @@ func main() {
 
 		repo, err := client.NewRepository(repoName, *registryURL, basicAuthTransport)
 		if err != nil {
-			logger.WithFields(log.Fields{"entry": entry}).Fatalf("Could not create repo from name! (err: %v)", err)
+			if *continueOnError {
+				logger.WithFields(log.Fields{"entry": entry}).Warnf("Could not create repo from name! (err: %v)", err)
+				continue
+			} else {
+				logger.WithFields(log.Fields{"entry": entry}).Fatalf("Could not create repo from name! (err: %v)", err)
+			}
 		}
 		logger.Debug("Successfully created repository object.")
 
@@ -182,12 +192,22 @@ func main() {
 		blobsService := repo.Blobs(ctx)
 		manifestService, err := repo.Manifests(ctx)
 		if err != nil {
-			logger.Fatalf("Couldn't fetch manifest service! (err: %v)", err)
+			if *continueOnError {
+				logger.Warnf("Couldn't fetch manifest service! (err: %v)", err)
+				continue
+			} else {
+				logger.Fatalf("Couldn't fetch manifest service! (err: %v)", err)
+			}
 		}
 
 		tagsData, err := tagsService.All(ctx)
 		if err != nil {
-			logger.Fatalf("Couldn't fetch tags! (err: %v)", err)
+			if *continueOnError {
+				logger.Warnf("Couldn't fetch tags! (err: %v)", err)
+				continue
+			} else {
+				logger.Fatalf("Couldn't fetch tags! (err: %v)", err)
+			}
 		}
 
 		var tags []Image

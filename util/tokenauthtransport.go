@@ -216,7 +216,6 @@ func expectTokenOrQuoted(s string) (value string, rest string) {
 }
 
 func (t *TokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	fmt.Print("Round trip called")
 	resp, err := t.Transport.RoundTrip(req)
 	if err != nil {
 		return resp, err
@@ -330,7 +329,6 @@ func parseOauthHeader(resp *http.Response) *authService {
 }
 
 func NewTokenAuthTransport(URL string, uname string, passwd string, insecure bool) *TokenTransport {
-	fmt.Println("NewTokenAuth called")
 	baseTransport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
 	}
