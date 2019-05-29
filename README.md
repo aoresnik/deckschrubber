@@ -44,20 +44,20 @@ We run our own private registry on a server with limited storage and it was only
 -v    shows version and quits
 -year int
       max age in days
-      
-      
+
+
 ```
 
 ## Registry preparation
-Deckschrubber uses the Docker Registry API. 
-Its delete endpoint is disabled by default, you have to enable it with the following entry in the registry configuration file: 
+Deckschrubber uses the Docker Registry API.
+Its delete endpoint is disabled by default, you have to enable it with the following entry in the registry configuration file:
 
 ```
 delete:
   enabled: true
 ```
 
-See [the documentation](https://github.com/docker/distribution/blob/master/docs/configuration.md#delete) for details. 
+See [the documentation](https://github.com/docker/distribution/blob/master/docs/configuration.md#delete) for details.
 
 ## Examples
 
@@ -82,11 +82,32 @@ $GOPATH/bin/deckschrubber -repos 30 -dry
 * **Remove all images of each repository except the 3 latest ones**
 
 ```
-$GOPATH/bin/deckschrubber -latest 3 
+$GOPATH/bin/deckschrubber -latest 3
 ```
 
 * **Remove all images with tags that ends with '-SNAPSHOT'**
 
 ```
-$GOPATH/bin/deckschrubber -tag ^.*-SNAPSHOT$ 
+$GOPATH/bin/deckschrubber -tag ^.*-SNAPSHOT$
+```
+
+* **Usage in a scenario where we want to keep CI images for 1 week, but keep at
+least 10 released images for at least 3 months**
+
+CI tags consist of Git commit hash (40 hex digits). All other tags are
+considered release tags. The same image can have both CI tag and release tag
+(but can also have only one of both for some projects).
+
+The problem is that the [docker-distribution](https://github.com/docker/distribution)
+registry server doesn't implement tag deletion, only image deletion. In order to
+support it, deckschrubber must only use image deletion. It should only delete
+the images where all the tags match deletion criteria. By default, deckschrubber
+does that. But in this case we have to specify to delete anyway, because
+otherwise the CI tags would prevent deletion.
+
+```
+# Scrub obsolete CI images (don't delete images that have also release tag)
+$GOPATH/bin/deckschrubber -day 7 -tag ^.*-SNAPSHOT$
+# Scrub obsolete release images (delete images that also have CI tag)
+$GOPATH/bin/deckschrubber -no-other-tags-check -month 3 -latest 10 -ntag ^.*-SNAPSHOT$
 ```
