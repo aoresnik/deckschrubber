@@ -20,11 +20,16 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 
 	log "github.com/Sirupsen/logrus"
+
+	// WARNING: this needs to be manually taken care of when merging changes or
+	// doing pull requests (this migthe be possible to be fixed by using Go
+	// modules)
+	"github.com/aoresnik/deckschrubber/util"
+
 	"github.com/docker/distribution/context"
 	schema2 "github.com/docker/distribution/manifest/schema2"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/client"
-	"github.com/fraunhoferfokus/deckschrubber/util"
 )
 
 var (
@@ -122,7 +127,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	basicAuthTransport := util.NewBasicAuthTransport(*registryURL, *uname, *passwd, *insecure)
+	basicAuthTransport := util.NewTokenAuthTransport(*registryURL, *uname, *passwd, *insecure)
 
 	// Create registry object
 	r, err := client.NewRegistry(*registryURL, basicAuthTransport)
