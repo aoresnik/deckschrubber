@@ -26,6 +26,7 @@ import (
 	// modules)
 	"github.com/aoresnik/deckschrubber/util"
 
+	"github.com/docker/distribution"
 	"github.com/docker/distribution/context"
 	schema2 "github.com/docker/distribution/manifest/schema2"
 	"github.com/docker/distribution/reference"
@@ -51,6 +52,9 @@ var (
 	// If true, when an error occurs while reading repo metadata, skip to next repos
 	// (otherwise stop and exit)
 	continueOnError *bool
+	// If true, delete the image that matches deletion criteria even if other tags that don't match criteria point to it
+	// (otherwise skip tag deletion)
+	noOtherTagsCheck *bool
 	// If true, version is shown and program quits
 	ver *bool
 
@@ -92,6 +96,8 @@ func init() {
 	dry = flag.Bool("dry", false, "does not actually deletes")
 	// Contininue on to next repo if error occurs while obtaining repo metadata (exit otherwise)
 	continueOnError = flag.Bool("continue-on-error", false, "if error occurs while obtaining repository, continue to next repo (exit otherwise)")
+	// Don't check if the image is used also by other tags before deletion
+	noOtherTagsCheck = flag.Bool("no-other-tags-check", false, "delete the image if the tag matches deletion criteria, even if the image is used by other tags")
 	// Shows version
 	ver = flag.Bool("v", false, "shows version and quits")
 	// Skip insecure TLS
@@ -99,6 +105,20 @@ func init() {
 	// Username and password
 	uname = flag.String("user", "", "Username for basic authentication")
 	passwd = flag.String("password", "", "Password for basic authentication")
+}
+
+func deleteImageOfTag(logger *log.Entry, tag Image, manifestService distribution.ManifestService, digestsDeleted map[string]bool) {
+	if !*dry {
+		logger.WithField("tag", tag.Tag).WithField("time", tag.Time).WithField("digest", tag.Descriptor.Digest).Infof("Deleting image (-dry=%v)", *dry)
+		err := manifestService.Delete(context.Background(), tag.Descriptor.Digest)
+		if err == nil {
+			digestsDeleted[tag.Descriptor.Digest.String()] = true
+		} else {
+			logger.WithField("tag", tag.Tag).WithField("err", err).Error("Could not delete image!")
+		}
+	} else {
+		logger.WithField("tag", tag.Tag).WithField("time", tag.Time).Infof("Not actually deleting image (-dry=%v)", *dry)
+	}
 }
 
 func main() {
@@ -350,19 +370,12 @@ func main() {
 		digestsDeleted := make(map[string]bool)
 		for _, tag := range deletableTags {
 			if !digestsDeleted[tag.Descriptor.Digest.String()] {
-				if nonDeletableDigests[tag.Descriptor.Digest.String()] == "" {
+				if *noOtherTagsCheck {
+					logger.WithField("tag", tag.Tag).Info("Deleting the image regardless of any other tags that point to it")
+					deleteImageOfTag(logger, tag, manifestService, digestsDeleted)
+				} else if nonDeletableDigests[tag.Descriptor.Digest.String()] == "" {
 					logger.WithField("tag", tag.Tag).Info("All tags for this image digest marked for deletion")
-					if !*dry {
-						logger.WithField("tag", tag.Tag).WithField("time", tag.Time).WithField("digest", tag.Descriptor.Digest).Infof("Deleting image (-dry=%v)", *dry)
-						err := manifestService.Delete(context.Background(), tag.Descriptor.Digest)
-						if err == nil {
-							digestsDeleted[tag.Descriptor.Digest.String()] = true
-						} else {
-							logger.WithField("tag", tag.Tag).WithField("err", err).Error("Could not delete image!")
-						}
-					} else {
-						logger.WithField("tag", tag.Tag).WithField("time", tag.Time).Infof("Not actually deleting image (-dry=%v)", *dry)
-					}
+					deleteImageOfTag(logger, tag, manifestService, digestsDeleted)
 				} else {
 					logger.WithField("tag", tag.Tag).WithField("alsoUsedByTags", nonDeletableDigests[tag.Descriptor.Digest.String()]).Infof("The underlying image is also used by non-deletable tags - skipping deletion")
 				}
